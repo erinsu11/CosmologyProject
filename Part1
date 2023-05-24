@@ -1,0 +1,480 @@
+# Packages 
+import numpy as np
+from matplotlib import pyplot as plt
+from scipy import integrate
+
+# Constants
+c = 299792.458 # km/s (speed of light)
+H0kmsmpc = 70.  # km/s/Mpc (Hubble constant)
+H0s = H0kmsmpc * 3.2408e-20 # H0 in inverse seconds is H0 in km/s/Mpc * (3.2408e-20 Mpc/km)
+H0y = H0s * 3.154e7 * 1.e9 # H0 in inverse Giga years is H0 in inverse seconds * (3.154e7 seconds/year) * (1e9 years / Giga year)
+
+# Writing a function for the integrand, i.e. 1/˙a1/a˙1/\dot{a} (adot inverse)
+def adotinv_flatmatter(a):
+    return np.sqrt(a) 
+
+# Now integrate that equation from scalefactor 0 to 1 (as an example) which will give the age of the universe today
+age_Hubble, uncert = integrate.quad(adotinv_flatmatter,0,1) 
+
+# Converting that to billions of years
+age_Gyr = age_Hubble/H0y # Age in Gyr
+
+print('Age of the universe in Hubble times = %.3f which is %.2f Gyr'%(age_Hubble,age_Gyr))
+print('Does this match the analytic prediction of 2/3 Hubble times?  Yes!')
+print('')
+print('Uncertainty on the numerical integral is ', uncert, 'so should be negligible.') 
+
+age_Gyr_easier = integrate.quad(adotinv_flatmatter,0,1)[0] / H0y 
+
+print('Check that the one step age calculation (%.2f Gyr) matches the two step one (%.2f Gyr).'%(age_Gyr_easier,age_Gyr))
+
+# Making an array of scalefactors
+astart = 0.0
+astop = 2.1
+astep = 0.001 
+a_arr = np.arange(astart,astop,astep)
+
+# Setting up an array of times (initially all set to zero) 
+t_Gyr = np.zeros(len(a_arr))  
+t_analytic_Gyr = np.zeros(len(a_arr))
+
+# Making a loop and do that integral for every final value of a (starting at a = 0 every time)
+for i,a_end in enumerate(a_arr): 
+    t_Hubble,uncert = integrate.quad(adotinv_flatmatter,0,a_end)
+    t_Gyr[i] = t_Hubble/H0y
+
+# Compare it to the analytic calculation 
+t_analytic_Gyr = (2 / (3 * H0y)) * a_arr ** (3/2)
+
+plt.plot(t_Gyr,a_arr, color = 'palevioletred', label='Numerical Solution')
+plt.plot(t_analytic_Gyr, a_arr,':',color='black', label='Analytic Solution')
+plt.axvline(x=age_Gyr, linestyle=':', color='gray')
+plt.axhline(y=1, linestyle=':', color='gray')
+plt.xlabel('Time (Gyr)')
+plt.ylabel('Scalefactor a(t)')
+plt.legend(loc='lower right', frameon=False)
+plt.xlim([0, 26])
+plt.show()
+
+
+# Changing matter density and cosmological constant
+# First write a function that takes as input a, Omega_M (om), and Omega_Lambda (ol) and outputs 1/adot
+def adotinv(a,om,ol):
+    ok = 1.0 - om - ol
+    adot= a * np.sqrt(om * a**(-3) + ok * a**(-2) + ol)
+    return 1.0/adot
+
+# Cosmology
+om_arr = [0.3, 0.3, 1.0, 3.0]
+ol_arr = [0.7,0.0, 0.0, 0.0]
+
+colors = ['rebeccapurple', 'palevioletred', 'plum', 'lightpink']
+for j in range(len(om_arr)):
+    om = om_arr[j]
+    ol = ol_arr[j]
+    age_Gyr = np.zeros(len(a_arr))
+    i = 0
+    for a in a_arr:
+        t_lookback_Gyr, _ = integrate.quad(adotinv, 1, a, args=(om, ol), epsrel=1e-8, limit=1000)
+        age_Gyr[i] = t_lookback_Gyr / H0y
+        i += 1
+    plt.plot(age_Gyr, a_arr, color=colors[j], label='$(\Omega_M,\Omega_\Lambda)$=(%.1f,%.1f)'%(om, ol))
+
+# Compare it to the analytic calculation 
+t_analytic_Gyr_flatmat  = (2 / (3 * H0y)) * (a_arr ** (3/2) - 1)
+
+# Plotting
+plt.plot(t_analytic_Gyr_flatmat, a_arr,':',color='black', alpha = 0.5)
+plt.axvline(x=0, linestyle=':', color='black')
+plt.axhline(y=1, linestyle=':', color='black')
+plt.xlabel('Lookback time (Gyr)')
+plt.ylabel('Scalefactor a(t)')
+plt.xlim([-15,15])
+plt.ylim([0,2])
+plt.legend(loc='lower right', frameon=False)
+
+# Radiation Only Model
+def adotinv(a, orr, om, ol):
+    ok = 1.0 - om - ol - orr
+    adot = a * np.sqrt(orr * a**(-4) + om * a**(-3) + ok * a**(-2) + ol)
+    return 1.0/adot
+
+# Cosmology
+om = 0.0
+ol = 0.0
+orr_arr = np.arange(0.2, 1.2, 0.2)
+
+colors = ['rebeccapurple', 'palevioletred', 'plum', 'mediumpurple', 'lightpink']
+for j, orr in enumerate(orr_arr):
+    age_Gyr = np.zeros(len(a_arr))
+    i = 0
+    for a in a_arr:
+        t_lookback_Gyr = integrate.quad(adotinv, 1, a, args=(orr, om, ol))[0] / H0y
+        age_Gyr[i] = t_lookback_Gyr
+        i += 1
+    plt.plot(age_Gyr, a_arr, color=colors[j], label='$\Omega_R$= %.1f'% (orr))
+    
+
+# Compare it to the analytic calculation 
+t_analytic_Gyr_flatrad  = (a_arr **(2) - 1)/ (2*H0y)
+
+plt.plot(t_analytic_Gyr_flatrad, a_arr,':',color='black', alpha = 0.5)
+plt.axvline(x=0, linestyle=':', color='black')
+plt.axhline(y=1, linestyle=':', color='black')
+plt.xlabel('Lookback time (Gyr)')
+plt.ylabel('Scalefactor a(t)')
+plt.legend(loc='lower right', frameon=False)
+plt.ylim([0, 2])
+plt.show()
+
+# Adding dark energy with a different equation of state
+def adotinv(a, om, ol, orr, w):
+    ok = 1.0 - om - ol
+    adot = a * np.sqrt(orr * a**(-4) + om * a**(-3) + ok * a**(-2) + ol * a**(-3*(1+w)))
+    return 1.0/adot
+
+# Cosmology
+om = 0.3
+ol = 0.7
+orr = 0.0
+w_arr = [-2, -1.5, -1]
+colors =  ['rebeccapurple', 'palevioletred', 'plum']
+
+for j, w in enumerate(w_arr):
+    t_lookback_Gyr = np.zeros(len(a_arr))
+    i = 0
+    for a in a_arr:
+        t_lookback_Gyr[i] = integrate.quad(adotinv, 1, a, args=(om, ol,orr, w))[0] / H0y
+        i += 1
+    plt.plot(t_lookback_Gyr, a_arr, color=colors[j], label='$w_\Lambda= %.1f$'%(w))
+
+plt.axvline(x=0, linestyle=':', color='black')
+plt.axhline(y=1, linestyle=':', color='black')
+plt.xlabel('Lookback time (Gyr)')
+plt.ylabel('Scalefactor a(t)')
+plt.legend(loc='lower right', frameon=False)
+plt.ylim([0, 2])
+plt.show()
+
+# Bouncing models
+def adotinv(a,om,ol):
+    ok = 1.0 - om - ol
+    adot= a * np.sqrt(om * a**(-3) + ok * a**(-2) + ol)
+    return 1.0/adot
+
+# Cosmology
+om_arr = [0.3, 0.7, 1.0, 3.0]
+ol_arr = [1.8, 2.6, 2.3, 4.5]
+
+colors = ['rebeccapurple', 'palevioletred', 'plum', 'lightpink']
+for j in range(len(om_arr)):
+    om = om_arr[j]
+    ol = ol_arr[j]
+    age_Gyr = np.zeros(len(a_arr))
+    i = 0
+    for a in a_arr:
+        t_lookback_Gyr, _ = integrate.quad(adotinv, 1, a, args=(om, ol), epsrel=1e-8, limit=1000)
+        age_Gyr[i] = t_lookback_Gyr / H0y
+        i += 1
+    plt.plot(age_Gyr, a_arr, color=colors[j], label='$(\Omega_M,\Omega_\Lambda)$=(%.1f,%.1f)'%(om, ol))
+
+
+plt.axvline(x=0, linestyle=':', color='black')
+plt.axhline(y=1, linestyle=':', color='black')
+plt.xlabel('Lookback time (Gyr)')
+plt.ylabel('Scalefactor a(t)')
+plt.xlim([-7,10])
+
+
+
+
+
+# Cosmological distances
+
+# Comoving distance 
+
+# Choose the redshift 
+z = 0.3
+
+# Choose a cosmology 
+om, ol = 0.3, 0.7
+
+# Write a function for the integrand
+def Ezinv(z, om, ol):
+    ok = 1.0-om-ol
+    Ez = np.sqrt(om *(1+z)**3 + ok *(1+z)**2 + ol)
+    return 1.0/Ez
+
+# Calcuating the integral
+xx = integrate.quad(Ezinv,0,z,args=(om,ol))[0] 
+
+# Subbing in the required constants to get the comoving distance 
+R0X = xx*cH0Glyr 
+
+# Making an array of redshifts
+zstart = 0.0
+zstop = 4.1
+zstep = 0.01 # Make this finer to make the plot smoother
+zarr = np.arange(zstart,zstop,zstep)
+
+# Making an array of distances
+xarr = np.zeros(len(zarr))
+xarr_at_emission = np.zeros(len(zarr))
+
+for i, z in enumerate(zarr):
+    xx = integrate.quad(Ezinv, 0, z, args=(om, ol))[0]
+    xarr[i] = xx * cH0Glyr
+    xarr_at_emission[i] = xx * cH0Glyr / (1+z)
+
+# Plotting
+plt.plot(zarr, xarr, label='$R_0\chi$', color = 'palevioletred')
+plt.plot(zarr, xarr_at_emission, label='$aR_0\chi$', color ='black')
+plt.xlabel('Redshift (z)')
+plt.ylabel('Distance (Glyr)')
+plt.legend(loc='lower right', frameon=False)
+plt.grid(True, linestyle='--', alpha=0.5)
+plt.xlim([0,4])
+plt.show()
+plt.ylim([0,2])
+plt.legend(loc='lower right', frameon=False)
+
+
+
+# Calculating the perpendicular comoving distance R0 * Sk(X) for angular diameter and luminosity distances
+def Sk(xx, ok):
+    if ok < 0.0:
+        dk = np.sin(np.sqrt(-ok)*xx)/np.sqrt(-ok)
+    elif ok > 0.0:
+        dk = np.sinh(np.sqrt(ok)*xx)/np.sqrt(ok)
+    else:
+        dk = xx
+    return dk
+
+for i, z in enumerate(zarr):
+    xarr[i] = integrate.quad(Ezinv,0,z,args=(om,ol))[0] 
+    
+# Array of proper distances in Glyr
+R0X = xarr*cH0Glyr 
+
+ok = 1.0-om-ol
+DD = R0X                             # Proper distance
+DL = Sk(xarr,ok)*(1+zarr)*cH0Glyr    # Luminosity distance
+DA = (Sk(xarr,ok)/(1+zarr))*cH0Glyr  # Angular diameter distance
+
+# Plotting
+plt.plot(zarr,DD,label='Proper Distance', color = 'palevioletred')
+plt.plot(zarr,DL,label='Luminosity Distance', color = 'black')
+plt.plot(zarr,DA,label='Angular Diameter Distance', color = 'plum')
+plt.legend(loc='upper left', frameon=False)
+plt.xlabel('Redshift (z)')
+plt.ylabel('$Distances$ (Glyr)')
+plt.xlim([0,4])
+plt.show()
+
+# Cosmology
+oms = [1, 0.3, 0, 0.3, 0]
+ols = [0, 0.7, 1, 0, 0]
+
+# Define the plot style for each model
+linestyles = ['--', '--', '--', '-', '-', '-']
+colors = ['black', 'palevioletred', 'plum', 'black', 'palevioletred', 'plum']
+
+# Loop over the cosmological models and plot the angular diameter distance
+for i, (om, ol) in enumerate(zip(oms, ols)):
+    if ol == 0.0:
+        ok = 1.0 - om
+        label = '$\Omega_m =$ {} (flat)'.format(om, ol)
+        linestyle = linestyles[i]
+        color = colors[i]
+    else:
+        ok = 1.0 - om - ol
+        label = '$\Omega_m =$ {} (open)'.format(om, ol)
+        linestyle = linestyles[i]
+        color = colors[i]
+    DA = np.zeros(len(zarr))
+    for j, z in enumerate(zarr):
+        xx = integrate.quad(Ezinv, 0, z, args=(om, ol, ok))[0]
+        DA[j] = Sk(xx,ok)/(1+z)*cH0Glyr
+    plt.plot(zarr, DA, linestyle=linestyle, color=color, label=label, alpha = 0.5)
+
+# Plotting
+plt.xlabel('Redshift $z$')
+plt.ylabel('Angular Diameter Distance (Glyr)')
+plt.xlim([0,4])
+plt.legend(loc='upper left', frameon=False)
+plt.show()
+
+# Define the plot style for each model
+linestyles = ['--', '--', '--', '-', '-', '-']
+colors = ['black', 'palevioletred', 'plum', 'palevioletred', 'plum']
+
+# Set the font family for the title and axis labels
+plt.rcParams['font.family'] = 'serif'
+
+# Loop over the cosmological models and plot the angular diameter distance
+for i, (om, ol) in enumerate(zip(oms, ols)):
+    if ol == 0.0:
+        ok = 1.0 - om
+        label = '$\Omega_m =$ {} (flat)'.format(om)
+        linestyle = linestyles[i]
+        color = colors[i]
+    else:
+        ok = 1.0 - om - ol
+        label = '$\Omega_m =$ {} (open)'.format(om)
+        linestyle = linestyles[i]
+        color = colors[i]
+    DA = np.zeros(len(zarr))
+    for j, z in enumerate(zarr):
+        xx = integrate.quad(Ezinv, 0, z, args=(om, ol, ok))[0]
+        DA[j] = Sk(xx,ok)*(1+z)*cH0Glyr
+    plt.plot(zarr, DA, linestyle=linestyle, color=color, label=label, alpha = 0.7)
+
+# Plotting
+plt.xlabel('Redshift $z$')
+plt.ylabel('Luminosity Distance (Glyr)')
+plt.xlim([0,4])
+plt.legend(loc='upper left', frameon=False)
+plt.show()
+
+# Plotting redshift as a function of scalefactor
+
+# Define the start, stop, and step size of the scale factor
+astart = 0.01
+astop = 1.1
+astep = 0.001
+
+# Creating an array of scale factors
+arr = np.arange(astart,astop,astep)
+
+# Calculating the corresponding redshifts
+redshifts = 1/arr - 1
+
+# Creating a subplot object and add gridlines
+fig, ax = plt.subplots()
+ax.grid(True, linestyle='--', alpha=0.5)
+
+# Plotting
+plt.plot(arr, redshifts, linestyle='-', color='palevioletred')
+plt.xlabel('Scalefactor $a$')
+plt.ylabel('Redshift $z(a)$')
+plt.xlim([0,1])
+plt.ylim([0, 10])
+plt.show()
+
+# Plotting normalised densities versus scalefactor
+
+# Defining array of scale factors
+arr = np.logspace(np.log10(0.0001), np.log10(100.1), num=50, endpoint=True)
+
+# Defining density parameters
+om = 0.3
+orr = 10e-5
+ol = 0.7
+
+# Calculating total density for each scale factor
+otot = om * arr **(-3) + orr * arr **(-4) + ol
+
+# Calculating relative contributions to total density for each component
+omn = om * arr **(-3) / otot
+orrn = orr * arr **(-4) / otot
+oln = ol / otot
+
+# Plotting relative contributions versus scale factor
+plt.plot(arr, omn, 'o-', label=r'$\frac{\Omega_M}{\Omega_{tot}}$', linewidth=1, markersize=2, color = 'palevioletred', alpha = 0.7)
+plt.plot(arr, orrn, 'o-', label=r'$\frac{\Omega_R}{\Omega_{tot}}$', linewidth=1, markersize=2, color = 'plum', alpha = 0.7)
+plt.plot(arr, oln, 'o-', label=r'$\frac{\Omega_\Lambda}{\Omega_{tot}}$', linewidth=1, markersize=2, color = 'black', alpha = 0.7)
+plt.xscale('log')
+plt.xlabel('Scalefactor $a$', fontsize=12)
+plt.ylabel(r'Normalised density $\frac{\Omega_i}{\Omega_{tot}}$', fontsize=12)
+plt.legend(fontsize=10, frameon=False)
+plt.xlim([10**(-4), 10**2])
+plt.tight_layout()
+plt.show()
+
+
+
+# Plotting normalised densities versus time 
+
+# Defining array of scale factors
+arr = np.logspace(np.log10(0.0001), np.log10(100.1), num=50, endpoint=True)
+trr = np.logspace(np.log10(0.0001), np.log10(100.1), num=50, endpoint=True)
+
+np.seterr(divide='ignore', invalid='ignore')
+
+# Calculate age of universe at each scalefactor
+age_Gyr = np.zeros(len(arr))
+i = 0
+for a in arr:
+    t_lookback_Gyr, _ = integrate.quad(adotinv, a, 1, args=(om, ol), epsrel=1e-8, limit=1000)
+    age_Gyr[i] = t_lookback_Gyr / H0y
+    i += 1
+
+# Cosmology
+om = 0.3
+orr = 10e-5
+ol = 0.7    
+
+# Calculate total density for each scale factor
+otot = om * arr **(-3) + orr * arr **(-4) + ol
+
+# Calculate relative contributions to total density for each component
+omn = om * arr **(-3) / otot
+orrn = orr * arr **(-4) / otot
+oln = ol / otot
+
+# Convert lookback time to time
+time_Gyr = np.max(age_Gyr) - age_Gyr
+
+# Plotting
+plt.plot(time_Gyr , omn, 'o-', label=r'$\frac{\Omega_M}{\Omega_{tot}}$', linewidth=1, markersize=2, color='palevioletred', alpha=0.7)
+plt.plot(time_Gyr , orrn, 'o-', label=r'$\frac{\Omega_R}{\Omega_{tot}}$', linewidth=1, markersize=2, color='plum', alpha=0.7)
+plt.plot(time_Gyr , oln, 'o-', label=r'$\frac{\Omega_\Lambda}{\Omega_{tot}}$', linewidth=1, markersize=2, color='black', alpha=0.7)
+plt.xlabel('Time (Gyr)', fontsize=12)
+plt.ylabel(r'Normalised density $\frac{\Omega_i}{\Omega_{tot}}$', fontsize=12)
+plt.legend(fontsize=10, frameon=False)
+plt.tight_layout()
+plt.xscale('log')
+plt.xlim([10**(-5), 70])
+plt.show()
+
+
+# Plotting lookback time versus redshift
+
+# Define redshift range to plot
+z_arr = np.linspace(0, 3, 1000)
+
+# Cosmology
+om_arr = [0.3, 0.3, 1.0, 3.0]
+ol_arr = [0.7, 0.0, 0.0, 0.0]
+
+# Write a function for the integrand
+def Ezinv(z, om, ol):
+    Ez = np.sqrt(om * (1+z)**3 + ol)
+    return 1.0/Ez
+
+# Calculate lookback time for each cosmological model
+tlb_arr = np.zeros((len(om_arr), len(z_arr)))
+for i in range(len(om_arr)):
+    om = om_arr[i]
+    ol = ol_arr[i]
+    for j, z in enumerate(z_arr):
+        tlb_arr[i, j] = integrate.quad(lambda z: Ezinv(z, om, ol)/(1+z), 0, z, epsabs=1e-10, epsrel=1e-10)[0] / H0y
+
+colors = ['lightpink', 'palevioletred', 'plum', 'mediumpurple']
+for i in range(len(om_arr)):
+    om = om_arr[i]
+    ol = ol_arr[i]
+    tlb = tlb_arr[i, :]
+    plt.plot(z_arr, tlb, label=r"$\Omega_M$ = {}, $\Omega_\Lambda$ = {}".format(om, ol), color=colors[i])
+
+# Compare it to the analytic calculation 
+t_analytical = (2 / (3 * H0y) ) * (1 - 1/((1+z_arr)**(3/2)) ) 
+
+# Plotting
+plt.plot(z_arr, t_analytical, color='black', linestyle='--')
+plt.xlabel('Redshift $z$', fontsize=12)
+plt.ylabel('Lookback time (Gyr)', fontsize=12)
+plt.xlim([0,3])
+plt.legend(fontsize=10, frameon=False)
+plt.show()
+
